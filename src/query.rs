@@ -31,6 +31,10 @@ fn create_message_stream(
                 Ok(json) => {
                     match MessageParser::parse(json) {
                         Ok(message) => yield Ok(message),
+                        Err(e) if e.is_unknown_message_type() => {
+                            eprintln!("Warning: {}", e);
+                            continue;
+                        }
                         Err(e) => {
                             yield Err(e);
                             break;

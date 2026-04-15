@@ -549,11 +549,19 @@ fn test_malformed_json_error() {
 
 #[test]
 fn test_unknown_type_handling() {
-    // The Message enum should handle unknown types via serde
+    // T5: Unknown type should produce serde error (not a generic parse error).
+    // When going through MessageParser::parse(), this would be UnknownMessageType,
+    // but direct serde deserialization produces a serde error since there's no
+    // matching variant.
     let unknown = r#"{"type": "unknown_type", "data": {}}"#;
     let result = serde_json::from_str::<Message>(unknown);
-    // Should error on unknown type
     assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("unknown_type"),
+        "Error should mention the unknown type name, got: {}",
+        err_msg
+    );
 }
 
 // ============================================================================
@@ -561,11 +569,11 @@ fn test_unknown_type_handling() {
 // ============================================================================
 
 #[test]
-fn test_all_130_fixtures_deserialize() {
+fn test_all_131_fixtures_deserialize() {
     let mut success_count = 0;
     let mut error_count = 0;
 
-    // Test all assistants
+    // Test all assistants (16)
     for i in 1..=16 {
         let path = format!("assistant_{:03}.json", i);
         match load_fixture(&path) {
@@ -574,7 +582,7 @@ fn test_all_130_fixtures_deserialize() {
         }
     }
 
-    // Test all users
+    // Test all users (5)
     for i in 1..=5 {
         let path = format!("user_{:03}.json", i);
         match load_fixture(&path) {
@@ -583,7 +591,7 @@ fn test_all_130_fixtures_deserialize() {
         }
     }
 
-    // Test all systems
+    // Test all systems (6)
     for i in 1..=6 {
         let path = format!("system_{:03}.json", i);
         match load_fixture(&path) {
@@ -592,7 +600,7 @@ fn test_all_130_fixtures_deserialize() {
         }
     }
 
-    // Test all results
+    // Test all results (6)
     for i in 1..=6 {
         let path = format!("result_{:03}.json", i);
         match load_fixture(&path) {
@@ -601,7 +609,7 @@ fn test_all_130_fixtures_deserialize() {
         }
     }
 
-    // Test all stream events
+    // Test all stream events (97)
     for i in 1..=97 {
         let path = format!("stream_event_{:03}.json", i);
         match load_fixture(&path) {
@@ -610,6 +618,15 @@ fn test_all_130_fixtures_deserialize() {
         }
     }
 
-    assert_eq!(success_count, 130, "All 130 fixtures should deserialize");
+    // Test all rate limit events (1)
+    for i in 1..=1 {
+        let path = format!("rate_limit_event_{:03}.json", i);
+        match load_fixture(&path) {
+            Message::RateLimitEvent(_) => success_count += 1,
+            _ => error_count += 1,
+        }
+    }
+
+    assert_eq!(success_count, 131, "All 131 fixtures should deserialize");
     assert_eq!(error_count, 0, "No deserialization errors expected");
 }

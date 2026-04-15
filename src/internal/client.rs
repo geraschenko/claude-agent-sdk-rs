@@ -34,8 +34,14 @@ impl InternalClient {
 
             while let Some(result) = stream.next().await {
                 let json = result?;
-                let message = MessageParser::parse(json)?;
-                messages.push(message);
+                match MessageParser::parse(json) {
+                    Ok(message) => messages.push(message),
+                    Err(e) if e.is_unknown_message_type() => {
+                        eprintln!("Warning: {}", e);
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                }
             }
             // Stream is dropped here
         }

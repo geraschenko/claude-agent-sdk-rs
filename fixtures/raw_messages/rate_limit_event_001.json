@@ -1,0 +1,12 @@
+{
+  "type": "rate_limit_event",
+  "rate_limit_info": {
+    "status": "allowed_warning",
+    "resetsAt": 1700000000,
+    "rateLimitType": "five_hour",
+    "utilization": 0.85,
+    "isUsingOverage": false
+  },
+  "uuid": "abc-123",
+  "session_id": "def-456"
+}
