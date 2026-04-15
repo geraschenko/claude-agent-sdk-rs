@@ -26,6 +26,71 @@ pub enum AssistantMessageError {
     Unknown,
 }
 
+/// Rate limit status values from CLI
+///
+/// Uses `#[serde(other)]` for forward compatibility — unknown status values
+/// deserialize to `Unknown` instead of causing parse errors.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RateLimitStatus {
+    Allowed,
+    AllowedWarning,
+    Rejected,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Rate limit type values from CLI
+///
+/// Uses `#[serde(other)]` for forward compatibility — unknown type values
+/// deserialize to `Unknown` instead of causing parse errors.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RateLimitType {
+    FiveHour,
+    SevenDay,
+    SevenDayOpus,
+    SevenDaySonnet,
+    Overage,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Rate limit information from CLI
+///
+/// CLI sends fields in camelCase (e.g., `resetsAt`, `rateLimitType`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateLimitInfo {
+    pub status: RateLimitStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resets_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit_type: Option<RateLimitType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utilization: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_using_overage: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overage_status: Option<RateLimitStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overage_resets_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overage_disabled_reason: Option<String>,
+}
+
+/// Rate limit event data from CLI
+///
+/// Top-level fields are already snake_case from CLI, so no `rename_all` needed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitEventData {
+    pub rate_limit_info: RateLimitInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
 /// Main message enum containing all message types from CLI
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -48,6 +113,9 @@ pub enum Message {
     /// Control cancel request (ignore this - it's internal control protocol)
     #[serde(rename = "control_cancel_request")]
     ControlCancelRequest(serde_json::Value),
+    /// Rate limit event from CLI (v2.1.45+)
+    #[serde(rename = "rate_limit_event")]
+    RateLimitEvent(RateLimitEventData),
 }
 
 /// User message
@@ -197,6 +265,18 @@ pub struct ResultMessage {
     /// Structured output (when output_format is specified)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub structured_output: Option<serde_json::Value>,
+    /// Per-model usage statistics (CLI sends as camelCase "modelUsage")
+    #[serde(skip_serializing_if = "Option::is_none", rename = "modelUsage")]
+    pub model_usage: Option<serde_json::Value>,
+    /// Permission denials during the session
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission_denials: Option<Vec<serde_json::Value>>,
+    /// Errors encountered during the session
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub errors: Option<Vec<serde_json::Value>>,
+    /// Session UUID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uuid: Option<String>,
 }
 
 /// Stream event message

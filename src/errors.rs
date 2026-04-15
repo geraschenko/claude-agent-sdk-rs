@@ -43,9 +43,23 @@ pub enum ClaudeError {
     #[error("Image validation error: {0}")]
     ImageValidation(#[from] ImageValidationError),
 
+    /// Unknown message type from CLI (forward compatibility)
+    #[error("Unknown message type: {type_name} (data: {data})")]
+    UnknownMessageType {
+        type_name: String,
+        data: serde_json::Value,
+    },
+
     /// Other errors (stores error message as string for serializability)
     #[error("{0}")]
     Other(String),
+}
+
+impl ClaudeError {
+    /// Check if this error represents an unknown message type
+    pub fn is_unknown_message_type(&self) -> bool {
+        matches!(self, ClaudeError::UnknownMessageType { .. })
+    }
 }
 
 /// Error when Claude Code CLI cannot be found

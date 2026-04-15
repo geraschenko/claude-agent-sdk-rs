@@ -600,6 +600,10 @@ impl ClaudeClient {
 
                 match MessageParser::parse(json) {
                     Ok(msg) => yield Ok(msg),
+                    Err(e) if e.is_unknown_message_type() => {
+                        eprintln!("Warning: {}", e);
+                        continue;
+                    }
                     Err(e) => yield Err(e),
                 }
             }
@@ -668,6 +672,10 @@ impl ClaudeClient {
                         if is_result {
                             break;
                         }
+                    }
+                    Err(e) if e.is_unknown_message_type() => {
+                        eprintln!("Warning: {}", e);
+                        continue;
                     }
                     Err(e) => yield Err(e),
                 }
