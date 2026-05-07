@@ -310,8 +310,7 @@ async fn test_permission_mode_bypass_rejected() -> anyhow::Result<()> {
         .expect_err("bypass should be rejected without capability flag");
     let err_text = format!("{err:#}");
     assert!(
-        err_text.contains("dangerously-skip-permissions")
-            || err_text.contains("bypassPermissions"),
+        err_text.contains("dangerously-skip-permissions") || err_text.contains("bypassPermissions"),
         "error should mention bypass capability requirement, got: {err_text}"
     );
 
@@ -327,10 +326,7 @@ async fn test_permission_mode_bypass_rejected() -> anyhow::Result<()> {
 async fn test_permission_mode_bypass_accepted_with_capability() -> anyhow::Result<()> {
     let options = ClaudeAgentOptions {
         permission_mode: Some(PermissionMode::AcceptEdits),
-        extra_args: HashMap::from([(
-            "allow-dangerously-skip-permissions".to_string(),
-            None,
-        )]),
+        extra_args: HashMap::from([("allow-dangerously-skip-permissions".to_string(), None)]),
         ..Default::default()
     };
     let mut client = ClaudeClient::new(options);

@@ -548,12 +548,13 @@ impl QueryFull {
             )
         })?;
 
-        serde_json::from_value::<crate::types::config::PermissionMode>(mode_value.clone())
-            .map_err(|e| {
+        serde_json::from_value::<crate::types::config::PermissionMode>(mode_value.clone()).map_err(
+            |e| {
                 ClaudeError::ControlProtocol(format!(
                     "set_permission_mode response contained invalid mode: {e}"
                 ))
-            })
+            },
+        )
     }
 
     /// Change AI model dynamically

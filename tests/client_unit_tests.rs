@@ -722,9 +722,7 @@ fn spawn_permission_mode_response_watcher(
             for i in seen..written.len() {
                 if let Some(ref parsed) = written[i].parsed {
                     if parsed.get("type").and_then(|v| v.as_str()) == Some("control_request")
-                        && parsed
-                            .pointer("/request/subtype")
-                            .and_then(|v| v.as_str())
+                        && parsed.pointer("/request/subtype").and_then(|v| v.as_str())
                             == Some("set_permission_mode")
                     {
                         let request_id = parsed["request_id"].as_str().unwrap();
