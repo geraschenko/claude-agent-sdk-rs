@@ -273,11 +273,45 @@ async fn test_permission_mode_change() -> anyhow::Result<()> {
     let mut client = ClaudeClient::new(ClaudeAgentOptions::default());
     client.connect().await?;
 
-    // Change permission mode dynamically
-    client
+    // Non-bypass mode changes succeed and return the confirmed mode
+    let mode = client
         .set_permission_mode(PermissionMode::AcceptEdits)
         .await?;
-    client.set_permission_mode(PermissionMode::Default).await?;
+    assert_eq!(mode, PermissionMode::AcceptEdits);
+
+    let mode = client.set_permission_mode(PermissionMode::Default).await?;
+    assert_eq!(mode, PermissionMode::Default);
+
+    // Bypass rejected from a default-launched session
+    let err = client
+        .set_permission_mode(PermissionMode::BypassPermissions)
+        .await
+        .expect_err("bypass should be rejected from default-launched session");
+    let err_text = format!("{err:#}");
+    assert!(
+        err_text.contains("dangerously-skip-permissions")
+            || err_text.contains("bypassPermissions"),
+        "error should mention bypass capability requirement, got: {err_text}"
+    );
+
+    client.disconnect().await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore] // Requires Claude CLI
+async fn test_permission_mode_change_bypass_accepted() -> anyhow::Result<()> {
+    let options = ClaudeAgentOptions {
+        permission_mode: Some(PermissionMode::BypassPermissions),
+        ..Default::default()
+    };
+    let mut client = ClaudeClient::new(options);
+    client.connect().await?;
+
+    let mode = client
+        .set_permission_mode(PermissionMode::BypassPermissions)
+        .await?;
+    assert_eq!(mode, PermissionMode::BypassPermissions);
 
     client.disconnect().await?;
     Ok(())
