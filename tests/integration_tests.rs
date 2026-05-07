@@ -267,17 +267,75 @@ async fn test_hook_pretooluse() -> anyhow::Result<()> {
     Ok(())
 }
 
+// Non-bypass mode switches succeed from AcceptEdits.
 #[tokio::test]
 #[ignore] // Requires Claude CLI
 async fn test_permission_mode_change() -> anyhow::Result<()> {
-    let mut client = ClaudeClient::new(ClaudeAgentOptions::default());
+    let options = ClaudeAgentOptions {
+        permission_mode: Some(PermissionMode::AcceptEdits),
+        ..Default::default()
+    };
+    let mut client = ClaudeClient::new(options);
     client.connect().await?;
 
-    // Change permission mode dynamically
-    client
+    let mode = client.set_permission_mode(PermissionMode::Plan).await?;
+    assert_eq!(mode, PermissionMode::Plan);
+
+    let mode = client.set_permission_mode(PermissionMode::Default).await?;
+    assert_eq!(mode, PermissionMode::Default);
+
+    let mode = client
         .set_permission_mode(PermissionMode::AcceptEdits)
         .await?;
-    client.set_permission_mode(PermissionMode::Default).await?;
+    assert_eq!(mode, PermissionMode::AcceptEdits);
+
+    client.disconnect().await?;
+    Ok(())
+}
+
+// Without --allow-dangerously-skip-permissions, switching to bypass fails.
+#[tokio::test]
+#[ignore] // Requires Claude CLI
+async fn test_permission_mode_bypass_rejected() -> anyhow::Result<()> {
+    let options = ClaudeAgentOptions {
+        permission_mode: Some(PermissionMode::AcceptEdits),
+        ..Default::default()
+    };
+    let mut client = ClaudeClient::new(options);
+    client.connect().await?;
+
+    let err = client
+        .set_permission_mode(PermissionMode::BypassPermissions)
+        .await
+        .expect_err("bypass should be rejected without capability flag");
+    let err_text = format!("{err:#}");
+    assert!(
+        err_text.contains("dangerously-skip-permissions") || err_text.contains("bypassPermissions"),
+        "error should mention bypass capability requirement, got: {err_text}"
+    );
+
+    client.disconnect().await?;
+    Ok(())
+}
+
+// With --allow-dangerously-skip-permissions via extra_args, switching to
+// bypass succeeds.  Paired with test above to prove bypass works iff the
+// capability flag was passed at launch.
+#[tokio::test]
+#[ignore] // Requires Claude CLI
+async fn test_permission_mode_bypass_accepted_with_capability() -> anyhow::Result<()> {
+    let options = ClaudeAgentOptions {
+        permission_mode: Some(PermissionMode::AcceptEdits),
+        extra_args: HashMap::from([("allow-dangerously-skip-permissions".to_string(), None)]),
+        ..Default::default()
+    };
+    let mut client = ClaudeClient::new(options);
+    client.connect().await?;
+
+    let mode = client
+        .set_permission_mode(PermissionMode::BypassPermissions)
+        .await?;
+    assert_eq!(mode, PermissionMode::BypassPermissions);
 
     client.disconnect().await?;
     Ok(())
