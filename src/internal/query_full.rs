@@ -516,10 +516,14 @@ impl QueryFull {
     }
 
     /// Change permission mode dynamically
+    ///
+    /// Returns the confirmed effective permission mode from Claude Code's response.
+    /// Returns an error if Claude Code rejects the mode change (e.g., runtime bypass
+    /// requires the session to have been launched with bypass capability).
     pub async fn set_permission_mode(
         &self,
         mode: crate::types::config::PermissionMode,
-    ) -> Result<()> {
+    ) -> Result<crate::types::config::PermissionMode> {
         let mode_str = match mode {
             crate::types::config::PermissionMode::Default => "default",
             crate::types::config::PermissionMode::AcceptEdits => "acceptEdits",
@@ -532,8 +536,24 @@ impl QueryFull {
             "mode": mode_str
         });
 
-        self.send_control_request(request).await?;
-        Ok(())
+        let response = self.send_control_request(request).await?;
+
+        if let Some(error) = response.get("error").and_then(|v| v.as_str()) {
+            return Err(ClaudeError::ControlProtocol(error.to_string()));
+        }
+
+        let mode_value = response.pointer("/response/mode").ok_or_else(|| {
+            ClaudeError::ControlProtocol(
+                "set_permission_mode response missing response.mode".to_string(),
+            )
+        })?;
+
+        serde_json::from_value::<crate::types::config::PermissionMode>(mode_value.clone())
+            .map_err(|e| {
+                ClaudeError::ControlProtocol(format!(
+                    "set_permission_mode response contained invalid mode: {e}"
+                ))
+            })
     }
 
     /// Change AI model dynamically

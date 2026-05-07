@@ -7,8 +7,9 @@ use claude_agent_sdk_rs::testing::{
     AssistantMessageBuilder, MockClient, MockTransport, ResultMessageBuilder, ScenarioBuilder,
     SystemMessageBuilder, Transport, timing_profiles,
 };
-use claude_agent_sdk_rs::{ClaudeAgentOptions, Message, PermissionMode};
+use claude_agent_sdk_rs::{ClaudeAgentOptions, ClaudeClient, Message, PermissionMode};
 use futures::StreamExt;
+use std::sync::Arc;
 use std::time::Duration;
 
 // =============================================================================
@@ -701,4 +702,171 @@ async fn test_scenario_with_trigger_pattern() {
     assert!(!messages.is_empty(), "Should have received messages");
 
     client.disconnect().await.unwrap();
+}
+
+// =============================================================================
+// set_permission_mode Response Parsing Tests
+// =============================================================================
+
+/// Watches for a `set_permission_mode` control request in transport writes,
+/// extracts the request_id, and injects a control_response with the given body
+/// fields merged in.
+fn spawn_permission_mode_response_watcher(
+    transport: Arc<MockTransport>,
+    response_fields: serde_json::Value,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut seen = 0;
+        loop {
+            let written = transport.written_messages_async().await;
+            for i in seen..written.len() {
+                if let Some(ref parsed) = written[i].parsed {
+                    if parsed.get("type").and_then(|v| v.as_str()) == Some("control_request")
+                        && parsed
+                            .pointer("/request/subtype")
+                            .and_then(|v| v.as_str())
+                            == Some("set_permission_mode")
+                    {
+                        let request_id = parsed["request_id"].as_str().unwrap();
+                        let mut response = serde_json::json!({
+                            "type": "control_response",
+                            "response": {
+                                "subtype": "set_permission_mode",
+                                "request_id": request_id,
+                            }
+                        });
+                        if let Some(resp_obj) = response["response"].as_object_mut() {
+                            if let Some(body_obj) = response_fields.as_object() {
+                                for (k, v) in body_obj {
+                                    resp_obj.insert(k.clone(), v.clone());
+                                }
+                            }
+                        }
+                        transport.inject(response);
+                        return;
+                    }
+                }
+            }
+            seen = written.len();
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+}
+
+#[tokio::test]
+async fn test_set_permission_mode_success_returns_confirmed_mode() {
+    let transport = Arc::new(MockTransport::builder().build());
+
+    let _watcher = spawn_permission_mode_response_watcher(
+        Arc::clone(&transport),
+        serde_json::json!({"response": {"mode": "bypassPermissions"}}),
+    );
+
+    let mut client = ClaudeClient::with_transport(
+        Arc::clone(&transport) as Arc<dyn Transport>,
+        ClaudeAgentOptions::default(),
+    );
+    client.connect_with_transport().await.unwrap();
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        client.set_permission_mode(PermissionMode::BypassPermissions),
+    )
+    .await
+    .expect("should not timeout");
+
+    assert_eq!(result.unwrap(), PermissionMode::BypassPermissions);
+    client.disconnect().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_set_permission_mode_error_response_returns_error() {
+    let transport = Arc::new(MockTransport::builder().build());
+
+    let _watcher = spawn_permission_mode_response_watcher(
+        Arc::clone(&transport),
+        serde_json::json!({
+            "error": "Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions"
+        }),
+    );
+
+    let mut client = ClaudeClient::with_transport(
+        Arc::clone(&transport) as Arc<dyn Transport>,
+        ClaudeAgentOptions::default(),
+    );
+    client.connect_with_transport().await.unwrap();
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        client.set_permission_mode(PermissionMode::BypassPermissions),
+    )
+    .await
+    .expect("should not timeout");
+
+    let err = result.unwrap_err();
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("dangerously-skip-permissions"),
+        "Error should contain rejection text, got: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_set_permission_mode_missing_response_mode_returns_error() {
+    let transport = Arc::new(MockTransport::builder().build());
+
+    let _watcher = spawn_permission_mode_response_watcher(
+        Arc::clone(&transport),
+        serde_json::json!({"response": {}}),
+    );
+
+    let mut client = ClaudeClient::with_transport(
+        Arc::clone(&transport) as Arc<dyn Transport>,
+        ClaudeAgentOptions::default(),
+    );
+    client.connect_with_transport().await.unwrap();
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        client.set_permission_mode(PermissionMode::Default),
+    )
+    .await
+    .expect("should not timeout");
+
+    let err = result.unwrap_err();
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("missing response.mode"),
+        "Error should mention missing mode, got: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_set_permission_mode_invalid_mode_value_returns_error() {
+    let transport = Arc::new(MockTransport::builder().build());
+
+    let _watcher = spawn_permission_mode_response_watcher(
+        Arc::clone(&transport),
+        serde_json::json!({"response": {"mode": "notARealMode"}}),
+    );
+
+    let mut client = ClaudeClient::with_transport(
+        Arc::clone(&transport) as Arc<dyn Transport>,
+        ClaudeAgentOptions::default(),
+    );
+    client.connect_with_transport().await.unwrap();
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        client.set_permission_mode(PermissionMode::Default),
+    )
+    .await
+    .expect("should not timeout");
+
+    let err = result.unwrap_err();
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("invalid mode"),
+        "Error should mention invalid mode, got: {err_msg}"
+    );
 }

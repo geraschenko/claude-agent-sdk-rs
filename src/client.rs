@@ -700,7 +700,9 @@ impl ClaudeClient {
 
     /// Change the permission mode dynamically
     ///
-    /// This is analogous to Python's `client.set_permission_mode()`.
+    /// Returns the confirmed effective permission mode from Claude Code's response.
+    /// Returns an error if Claude Code rejects the mode change (e.g., runtime bypass
+    /// requires the session to have been launched with bypass capability).
     ///
     /// # Arguments
     ///
@@ -708,8 +710,9 @@ impl ClaudeClient {
     ///
     /// # Errors
     ///
-    /// Returns an error if the client is not connected or if sending fails.
-    pub async fn set_permission_mode(&self, mode: PermissionMode) -> Result<()> {
+    /// Returns an error if the client is not connected, if sending fails, or if
+    /// Claude Code rejects the requested mode change.
+    pub async fn set_permission_mode(&self, mode: PermissionMode) -> Result<PermissionMode> {
         let query = self.query.as_ref().ok_or_else(|| {
             ClaudeError::InvalidConfig("Client not connected. Call connect() first.".to_string())
         })?;
