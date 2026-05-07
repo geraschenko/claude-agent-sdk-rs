@@ -267,26 +267,32 @@ async fn test_hook_pretooluse() -> anyhow::Result<()> {
     Ok(())
 }
 
+// Without bypass launch flag: non-bypass modes succeed, bypass is rejected.
+// Paired with test_permission_mode_bypass_requires_launch_flag below to prove
+// bypass works iff the session was launched with bypass capability.
 #[tokio::test]
 #[ignore] // Requires Claude CLI
 async fn test_permission_mode_change() -> anyhow::Result<()> {
     let mut client = ClaudeClient::new(ClaudeAgentOptions::default());
     client.connect().await?;
 
-    // Non-bypass mode changes succeed and return the confirmed mode
+    // Non-bypass modes return the confirmed effective mode
     let mode = client
         .set_permission_mode(PermissionMode::AcceptEdits)
         .await?;
     assert_eq!(mode, PermissionMode::AcceptEdits);
 
+    let mode = client.set_permission_mode(PermissionMode::Plan).await?;
+    assert_eq!(mode, PermissionMode::Plan);
+
     let mode = client.set_permission_mode(PermissionMode::Default).await?;
     assert_eq!(mode, PermissionMode::Default);
 
-    // Bypass rejected from a default-launched session
+    // Bypass is rejected: session was not launched with bypass capability
     let err = client
         .set_permission_mode(PermissionMode::BypassPermissions)
         .await
-        .expect_err("bypass should be rejected from default-launched session");
+        .expect_err("bypass should be rejected without bypass launch flag");
     let err_text = format!("{err:#}");
     assert!(
         err_text.contains("dangerously-skip-permissions")
@@ -298,9 +304,12 @@ async fn test_permission_mode_change() -> anyhow::Result<()> {
     Ok(())
 }
 
+// With bypass launch flag: bypass mode is accepted at runtime.
+// Paired with test_permission_mode_change above to prove bypass works iff
+// the session was launched with bypass capability.
 #[tokio::test]
 #[ignore] // Requires Claude CLI
-async fn test_permission_mode_change_bypass_accepted() -> anyhow::Result<()> {
+async fn test_permission_mode_bypass_requires_launch_flag() -> anyhow::Result<()> {
     let options = ClaudeAgentOptions {
         permission_mode: Some(PermissionMode::BypassPermissions),
         ..Default::default()
@@ -308,6 +317,7 @@ async fn test_permission_mode_change_bypass_accepted() -> anyhow::Result<()> {
     let mut client = ClaudeClient::new(options);
     client.connect().await?;
 
+    // Bypass is accepted: session was launched with bypass capability
     let mode = client
         .set_permission_mode(PermissionMode::BypassPermissions)
         .await?;
